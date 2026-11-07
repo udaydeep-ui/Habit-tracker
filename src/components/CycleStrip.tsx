@@ -1,24 +1,35 @@
 import React from 'react';
-import { useTracker } from '../context/TrackerContext';
+import { useTracker, getCycleKey } from '../context/TrackerContext';
 import { DayTypeTag } from './DayTypeTag';
 import { StatusBadge } from './StatusBadge';
-import { ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, PlusCircle, RotateCw, CheckCircle2 } from 'lucide-react';
 
 export const CycleStrip: React.FC = () => {
-  const { program, logs, selectedDate, setSelectedDate, currentCycleDayNumber, currentLoop } = useTracker();
+  const {
+    program,
+    logs,
+    activeLoop,
+    activeCycleDayNumber,
+    setActiveLoop,
+    setActiveCycleDay,
+    advanceToNextLoop,
+    getLog,
+  } = useTracker();
 
-  // Find latest log for each cycle day
-  const getCycleDayStatus = (dayNum: number) => {
-    // Look for matching log for this loop or recent dates
-    const relevantDates = Object.keys(logs).filter((d) => logs[d].cycleDayNumber === dayNum);
-    if (relevantDates.length === 0) return 'pending';
-    // Get the most recent date for this cycle day
-    relevantDates.sort().reverse();
-    return logs[relevantDates[0]].status;
-  };
+  const cycleLength = program.cycleLength || 9;
+
+  // Check how many days in activeLoop are completed
+  let loopCompletedCount = 0;
+  for (let d = 1; d <= cycleLength; d++) {
+    const l = getLog(activeLoop, d);
+    if (l.status === 'completed') loopCompletedCount++;
+  }
+  const isLoopComplete = loopCompletedCount === cycleLength;
 
   const getBorderColor = (type: string, isSelected: boolean) => {
-    if (isSelected) return 'ring-2 ring-emerald-400 border-emerald-400 bg-slate-800/90 shadow-lg shadow-emerald-500/10';
+    if (isSelected) {
+      return 'ring-2 ring-emerald-400 border-emerald-400 bg-slate-800/90 shadow-lg shadow-emerald-500/20';
+    }
     switch (type) {
       case 'easy':
         return 'border-emerald-500/30 hover:border-emerald-400/60 bg-slate-900/60';
@@ -34,40 +45,75 @@ export const CycleStrip: React.FC = () => {
   };
 
   return (
-    <div className="w-full">
-      <div className="flex items-center justify-between mb-3 px-1">
+    <div className="w-full space-y-2">
+      {/* Loop Switcher & Progression Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-1">
         <div className="flex items-center gap-2">
-          <span className="text-xs font-mono font-bold tracking-wider text-slate-400 uppercase">
-            9-Day Program Rail
+          {/* Loop switcher buttons */}
+          <div className="flex items-center bg-slate-900 border border-slate-800 rounded-xl p-1 gap-1">
+            <button
+              type="button"
+              disabled={activeLoop <= 1}
+              onClick={() => setActiveLoop(activeLoop - 1)}
+              className="p-1 rounded-lg text-slate-400 hover:text-white disabled:opacity-30 disabled:hover:text-slate-400 transition-colors"
+              title="Previous Loop"
+            >
+              <ChevronLeft size={16} />
+            </button>
+
+            <span className="px-2 text-xs font-mono font-black text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+              <span>Loop #{activeLoop}</span>
+              {isLoopComplete && (
+                <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block animate-pulse" title="Loop 100% Completed" />
+              )}
+            </span>
+
+            <button
+              type="button"
+              onClick={() => setActiveLoop(activeLoop + 1)}
+              className="p-1 rounded-lg text-slate-400 hover:text-white transition-colors"
+              title="Next Loop"
+            >
+              <ChevronRight size={16} />
+            </button>
+          </div>
+
+          <span className="text-xs font-mono text-slate-400 hidden sm:inline">
+            ({loopCompletedCount}/{cycleLength} Days Done)
           </span>
-          <span className="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 font-mono">
-            Loop #{currentLoop}
-          </span>
+
+          {/* New Loop recurring button */}
+          <button
+            type="button"
+            onClick={advanceToNextLoop}
+            className="px-2.5 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 text-xs font-bold font-mono flex items-center gap-1 transition-all active:scale-95"
+            title="Complete current cycle and start a fresh loop"
+          >
+            <RotateCw size={12} />
+            <span>+ Start Next Loop</span>
+          </button>
         </div>
+
         <div className="text-xs text-slate-400 flex items-center gap-1 font-mono">
-          <span>Synced to Gym Cycle</span>
-          <ChevronRight size={14} />
+          <span className="text-slate-300 font-bold">Unsynced Recurring Cycle</span>
+          <span className="text-slate-500">&bull;</span>
+          <span>Click any day to view or log</span>
         </div>
       </div>
 
-      {/* Horizontal scrollable track */}
+      {/* 9-Day Horizontal Rail */}
       <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-9 gap-2 pb-1">
         {program.days.map((day) => {
-          const isCurrentSelected = day.dayNumber === currentCycleDayNumber;
-          const status = getCycleDayStatus(day.dayNumber);
+          const isCurrentSelected = day.dayNumber === activeCycleDayNumber;
+          const dayLog = getLog(activeLoop, day.dayNumber);
+          const status = dayLog.status;
 
           return (
             <button
               key={day.id}
               type="button"
-              onClick={() => {
-                // If selected date is already matching cycleDayNumber, do nothing, else find or use date
-                const matchDate = Object.keys(logs).find((d) => logs[d].cycleDayNumber === day.dayNumber);
-                if (matchDate) {
-                  setSelectedDate(matchDate);
-                }
-              }}
-              className={`flex flex-col text-left p-2.5 rounded-xl border transition-all duration-200 relative group ${getBorderColor(
+              onClick={() => setActiveCycleDay(day.dayNumber)}
+              className={`flex flex-col text-left p-2.5 rounded-xl border transition-all duration-200 relative group cursor-pointer ${getBorderColor(
                 day.type,
                 isCurrentSelected
               )}`}

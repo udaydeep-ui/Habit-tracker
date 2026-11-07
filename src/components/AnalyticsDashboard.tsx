@@ -13,13 +13,25 @@ import {
   Trophy,
 } from 'lucide-react';
 import { useTracker } from '../context/TrackerContext';
+import { ConsistencyStreak } from './ConsistencyStreak';
+import { DayEntryLog, StrengthExercise, StrengthSet } from '../types';
 
 export const AnalyticsDashboard: React.FC = () => {
   const { logs, program, currentLoop } = useTracker();
   const [activeMetricTab, setActiveMetricTab] = useState<'calories' | 'running' | 'status'>('calories');
 
-  // Sorted list of logged dates
-  const sortedDates = Object.keys(logs).sort();
+  // Deduplicate unique cycle logs across loops and days
+  const uniqueLogsMap = new Map<string, DayEntryLog>();
+  Object.values(logs).forEach((l) => {
+    const key = `L${l.loopNumber}-D${l.cycleDayNumber}`;
+    if (!uniqueLogsMap.has(key) || l.status !== 'pending') {
+      uniqueLogsMap.set(key, l);
+    }
+  });
+  const uniqueLogs = Array.from(uniqueLogsMap.values()).sort((a, b) => {
+    if (a.loopNumber !== b.loopNumber) return a.loopNumber - b.loopNumber;
+    return a.cycleDayNumber - b.cycleDayNumber;
+  });
 
   // Metrics aggregations
   let totalCompleted = 0;
@@ -30,8 +42,7 @@ export const AnalyticsDashboard: React.FC = () => {
   let totalRunKm = 0;
   let prList: { exercise: string; weight: number; reps: number; date: string }[] = [];
 
-  sortedDates.forEach((date) => {
-    const l = logs[date];
+  uniqueLogs.forEach((l) => {
     if (l.status === 'completed') totalCompleted++;
     if (l.status === 'failed') totalFailed++;
     if (l.status === 'postponed_cancelled') totalPostponed++;
@@ -40,34 +51,37 @@ export const AnalyticsDashboard: React.FC = () => {
     totalCaloriesConsumed += l.calories?.consumed || 0;
     totalRunKm += l.progressions?.runningDistanceKm || 0;
 
-    l.progressions?.strengthExercises?.forEach((ex) => {
+    l.progressions?.strengthExercises?.forEach((ex: StrengthExercise) => {
       if (ex.isPR && ex.sets.length > 0) {
-        const topSet = ex.sets.reduce((max, s) => (s.weightKg > max.weightKg ? s : max), ex.sets[0]);
+        const topSet = ex.sets.reduce((max: StrengthSet, s: StrengthSet) => (s.weightKg > max.weightKg ? s : max), ex.sets[0]);
         prList.push({
           exercise: ex.name,
           weight: topSet.weightKg,
           reps: topSet.reps,
-          date,
+          date: l.date || `L${l.loopNumber} D${l.cycleDayNumber}`,
         });
       }
     });
   });
 
-  const totalLoggedDays = sortedDates.length || 1;
-  const adherenceRate = Math.round((totalCompleted / totalLoggedDays) * 100);
-  const avgBurnedPerDay = Math.round(totalCaloriesBurned / totalLoggedDays);
-  const avgConsumedPerDay = Math.round(totalCaloriesConsumed / totalLoggedDays);
+  const totalLoggedSessions = uniqueLogs.filter((l) => l.status !== 'pending').length || 1;
+  const adherenceRate = Math.round((totalCompleted / Math.max(1, totalCompleted + totalFailed + totalPostponed)) * 100) || 0;
+  const avgBurnedPerDay = Math.round(totalCaloriesBurned / totalLoggedSessions);
+  const avgConsumedPerDay = Math.round(totalCaloriesConsumed / totalLoggedSessions);
   const avgNetBalance = avgConsumedPerDay - avgBurnedPerDay;
 
-  // Chart data for recent 10 days
-  const recentDates = sortedDates.slice(-10);
+  // Recent 10 sessions for chart
+  const recentLogs = uniqueLogs.slice(-10);
   const maxCal = Math.max(
     3000,
-    ...recentDates.map((d) => Math.max(logs[d].calories?.consumed || 0, logs[d].calories?.burned || 0))
+    ...recentLogs.map((l) => Math.max(l.calories?.consumed || 0, l.calories?.burned || 0))
   );
 
   return (
     <div className="space-y-6">
+      {/* Consistency Streak Visual Component */}
+      <ConsistencyStreak />
+
       {/* Top Athletic Metrics Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {/* Adherence Rate */}
@@ -204,31 +218,31 @@ export const AnalyticsDashboard: React.FC = () => {
             </div>
 
             <div className="h-64 flex items-end gap-2 sm:gap-4 pt-6 border-b border-slate-800 pb-2">
-              {recentDates.map((date) => {
-                const l = logs[date];
+              {recentLogs.map((l) => {
                 const cBurn = l.calories?.burned || 0;
                 const cConsume = l.calories?.consumed || 0;
                 const burnHeight = Math.min(100, Math.round((cBurn / maxCal) * 100));
                 const consumeHeight = Math.min(100, Math.round((cConsume / maxCal) * 100));
+                const label = `L${l.loopNumber}D${l.cycleDayNumber}`;
 
                 return (
-                  <div key={date} className="flex-1 flex flex-col items-center h-full justify-end group">
+                  <div key={l.id} className="flex-1 flex flex-col items-center h-full justify-end group">
                     <div className="flex items-end gap-1 w-full justify-center h-full">
                       {/* Intake Bar */}
                       <div
                         className="w-1/2 max-w-[18px] bg-amber-500/80 group-hover:bg-amber-400 rounded-t-sm transition-all"
                         style={{ height: `${consumeHeight}%` }}
-                        title={`Consumed: ${cConsume} kcal on ${date}`}
+                        title={`Loop ${l.loopNumber} Day ${l.cycleDayNumber}: Consumed ${cConsume} kcal`}
                       />
                       {/* Burn Bar */}
                       <div
                         className="w-1/2 max-w-[18px] bg-orange-500/80 group-hover:bg-orange-400 rounded-t-sm transition-all"
                         style={{ height: `${burnHeight}%` }}
-                        title={`Burned: ${cBurn} kcal on ${date}`}
+                        title={`Loop ${l.loopNumber} Day ${l.cycleDayNumber}: Burned ${cBurn} kcal`}
                       />
                     </div>
-                    <span className="text-[10px] font-mono text-slate-500 mt-2 truncate max-w-[40px]">
-                      {date.slice(5)}
+                    <span className="text-[10px] font-mono text-slate-400 mt-2 truncate max-w-[42px] font-bold">
+                      {label}
                     </span>
                   </div>
                 );
@@ -252,25 +266,25 @@ export const AnalyticsDashboard: React.FC = () => {
             </div>
 
             <div className="h-64 flex items-end gap-2 sm:gap-4 pt-6 border-b border-slate-800 pb-2">
-              {recentDates.map((date) => {
-                const l = logs[date];
+              {recentLogs.map((l) => {
                 const km = l.progressions?.runningDistanceKm || 0;
                 const mins = l.progressions?.runningDurationMin || 0;
                 const kmHeight = Math.min(100, Math.round((km / 10) * 100));
+                const label = `L${l.loopNumber}D${l.cycleDayNumber}`;
 
                 return (
-                  <div key={date} className="flex-1 flex flex-col items-center h-full justify-end group">
+                  <div key={l.id} className="flex-1 flex flex-col items-center h-full justify-end group">
                     <div className="w-full flex justify-center items-end h-full">
                       <div
                         className="w-full max-w-[28px] bg-cyan-500/80 group-hover:bg-cyan-400 rounded-t-sm transition-all flex items-center justify-center text-[10px] font-mono font-bold text-slate-950"
                         style={{ height: `${Math.max(10, kmHeight)}%` }}
-                        title={`${km} km (${mins} min) on ${date}`}
+                        title={`Loop ${l.loopNumber} Day ${l.cycleDayNumber}: ${km} km (${mins} min)`}
                       >
                         {km > 0 ? `${km}k` : ''}
                       </div>
                     </div>
-                    <span className="text-[10px] font-mono text-slate-500 mt-2 truncate max-w-[40px]">
-                      {date.slice(5)}
+                    <span className="text-[10px] font-mono text-slate-400 mt-2 truncate max-w-[42px] font-bold">
+                      {label}
                     </span>
                   </div>
                 );
@@ -326,17 +340,17 @@ export const AnalyticsDashboard: React.FC = () => {
               <div className="h-4 rounded-full overflow-hidden flex w-full bg-slate-950 border border-slate-800">
                 <div
                   className="bg-emerald-500 transition-all"
-                  style={{ width: `${(totalCompleted / totalLoggedDays) * 100}%` }}
+                  style={{ width: `${(totalCompleted / totalLoggedSessions) * 100}%` }}
                   title={`Completed: ${totalCompleted}`}
                 />
                 <div
                   className="bg-rose-500 transition-all"
-                  style={{ width: `${(totalFailed / totalLoggedDays) * 100}%` }}
+                  style={{ width: `${(totalFailed / totalLoggedSessions) * 100}%` }}
                   title={`Failed: ${totalFailed}`}
                 />
                 <div
                   className="bg-amber-400 transition-all"
-                  style={{ width: `${(totalPostponed / totalLoggedDays) * 100}%` }}
+                  style={{ width: `${(totalPostponed / totalLoggedSessions) * 100}%` }}
                   title={`Postponed: ${totalPostponed}`}
                 />
               </div>

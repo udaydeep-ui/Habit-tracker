@@ -257,88 +257,96 @@ export const DEFAULT_HABITS: Habit[] = [
   },
 ];
 
-// Helper to generate seed logs for past days up to today
-export function generateInitialLogs(daysCount: number = 7): Record<string, DayEntryLog> {
+// Helper to generate seed logs for Loop 1 and current cycle position
+export function generateInitialLogs(): Record<string, DayEntryLog> {
   const logs: Record<string, DayEntryLog> = {};
   const today = new Date();
 
-  // Create logs from 6 days ago to today
-  for (let i = daysCount - 1; i >= 0; i--) {
+  // Seed Loop 1 (Days 1 to 9)
+  // Days 1-6 completed/postponed, Day 7 active/today, Days 8-9 pending
+  const dayStatuses: DayEntryLog['status'][] = [
+    'completed', // Day 1
+    'completed', // Day 2
+    'completed', // Day 3
+    'postponed_cancelled', // Day 4
+    'completed', // Day 5
+    'completed', // Day 6
+    'pending', // Day 7 (Today's active session)
+    'pending', // Day 8
+    'pending', // Day 9
+  ];
+
+  for (let dayNum = 1; dayNum <= 9; dayNum++) {
+    const offsetDays = 7 - dayNum; // Day 7 is today (0 offset)
     const d = new Date(today);
-    d.setDate(today.getDate() - i);
+    d.setDate(today.getDate() - offsetDays);
     const dateStr = d.toISOString().split('T')[0];
 
-    // Cycle day 1 to 9 based on index
-    const cycleDay = (daysCount - 1 - i + 1) > 9 ? ((daysCount - 1 - i) % 9) + 1 : (daysCount - 1 - i + 1);
-    const loop = Math.floor((daysCount - 1 - i) / 9) + 1;
+    const status = dayStatuses[dayNum - 1];
+    const caloriesBurned = [520, 480, 420, 460, 540, 620, 470, 390, 450][dayNum - 1];
+    const caloriesConsumed = [2450, 2600, 2380, 2520, 2700, 2850, 2400, 2450, 2500][dayNum - 1];
 
-    // Set statuses: realistic mix of completed tick, postponed minus, completed tick
-    let status: DayEntryLog['status'] = 'completed';
-    if (i === 4) status = 'postponed_cancelled'; // 4 days ago postponed
-    if (i === 2) status = 'completed';
-    if (i === 0) status = 'pending'; // Today is fresh
-
-    const caloriesBurned = [520, 480, 420, 460, 540, 610, 470][(daysCount - 1 - i) % 7] || 500;
-    const caloriesConsumed = [2450, 2600, 2380, 2520, 2700, 2850, 2400][(daysCount - 1 - i) % 7] || 2500;
-
-    logs[dateStr] = {
-      id: `log-${dateStr}`,
+    const logEntry: DayEntryLog = {
+      id: `log-l1-d${dayNum}`,
       date: dateStr,
-      cycleDayNumber: cycleDay,
-      loopNumber: loop,
+      cycleDayNumber: dayNum,
+      loopNumber: 1,
       status: status,
       tasksStatus: {
-        'd1-t1': 'completed',
-        'd1-t2': status === 'postponed_cancelled' ? 'postponed_cancelled' : 'completed',
-        'd1-t3': status === 'postponed_cancelled' ? 'failed' : 'completed',
-        'd1-t4': 'completed',
+        [`d${dayNum}-t1`]: status === 'completed' ? 'completed' : 'pending',
+        [`d${dayNum}-t2`]: status === 'completed' ? 'completed' : status === 'postponed_cancelled' ? 'postponed_cancelled' : 'pending',
+        [`d${dayNum}-t3`]: status === 'completed' ? 'completed' : 'pending',
       },
       habitsStatus: {
-        'habit-1': 'completed',
-        'habit-2': 'completed',
-        'habit-3': status === 'completed' ? 'completed' : 'postponed_cancelled',
-        'habit-4': 'completed',
-        'habit-5': i % 2 === 0 ? 'completed' : 'failed',
-        'habit-6': 'completed',
+        'habit-1': status === 'completed' ? 'completed' : 'pending',
+        'habit-2': status === 'completed' ? 'completed' : 'pending',
+        'habit-3': status === 'completed' ? 'completed' : 'pending',
+        'habit-4': status === 'completed' ? 'completed' : 'pending',
+        'habit-5': status === 'completed' ? 'completed' : 'pending',
+        'habit-6': status === 'completed' ? 'completed' : 'pending',
       },
       calories: {
         consumed: caloriesConsumed,
         burned: caloriesBurned,
         targetCalories: 2500,
         proteinGrams: 145,
-        carbsGrams: 280,
+        carbsGrams: 275,
         fatGrams: 65,
       },
       progressions: {
-        bodyWeightKg: 74.2 - (daysCount - 1 - i) * 0.1,
-        runningDistanceKm: cycleDay === 6 ? 3.5 : cycleDay === 1 || cycleDay === 5 ? 2.8 : undefined,
-        runningDurationMin: cycleDay === 6 ? 25 : cycleDay === 1 || cycleDay === 5 ? 20 : undefined,
-        runningSpeedKmh: cycleDay === 6 ? 6.8 : 7.2,
-        intervalsCompleted: cycleDay === 4 ? 5 : cycleDay === 1 ? 5 : undefined,
+        bodyWeightKg: 74.2 - (dayNum * 0.1),
+        runningDistanceKm: dayNum === 6 ? 3.5 : dayNum === 1 || dayNum === 5 ? 2.8 : undefined,
+        runningDurationMin: dayNum === 6 ? 20 : dayNum === 1 || dayNum === 5 ? 20 : undefined,
+        runningSpeedKmh: dayNum === 6 ? 6.8 : 7.2,
+        intervalsCompleted: dayNum === 4 ? 5 : dayNum === 1 ? 5 : undefined,
         rpeScore: 7,
         strengthExercises: [
           {
-            id: 'ex-1',
-            name: cycleDay === 1 ? 'Bench Press' : cycleDay === 2 ? 'Barbell Squat' : 'Overhead Press',
+            id: `ex-${dayNum}`,
+            name: dayNum === 1 ? 'Bench Press' : dayNum === 2 ? 'Barbell Squat' : dayNum === 6 ? 'Deadlift' : 'Overhead Press',
             sets: [
               { weightKg: 80, reps: 8, rpe: 7 },
               { weightKg: 85, reps: 6, rpe: 8 },
               { weightKg: 85, reps: 6, rpe: 9 },
             ],
-            notes: 'Felt strong, clean lockout',
-            isPR: i === 3,
+            notes: 'Strong tempo and control',
+            isPR: dayNum === 2,
           },
         ],
       },
       dayWorks: {
-        warmupCompleted: true,
-        breathingCheck: true,
-        workoutNotes: `Completed cycle day ${cycleDay} session with good cadence and energy.`,
+        warmupCompleted: status === 'completed',
+        breathingCheck: status === 'completed',
+        workoutNotes: status === 'completed' ? `Completed Day ${dayNum} according to 9-day cycle guidelines.` : '',
         feeling: 'good',
       },
-      createdAt: new Date(d.setHours(8, 0, 0, 0)).toISOString(),
-      updatedAt: new Date(d.setHours(20, 30, 0, 0)).toISOString(),
+      createdAt: d.toISOString(),
+      updatedAt: d.toISOString(),
     };
+
+    // Store by both cycle key L1-D{dayNum} and dateStr for full cross-compatibility
+    logs[`L1-D${dayNum}`] = logEntry;
+    logs[dateStr] = logEntry;
   }
 
   return logs;

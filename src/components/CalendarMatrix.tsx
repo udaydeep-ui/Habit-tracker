@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Check, X, Minus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon } from 'lucide-react';
 import { useTracker } from '../context/TrackerContext';
 import { StatusBadge } from './StatusBadge';
 
 export const CalendarMatrix: React.FC = () => {
-  const { logs, selectedDate, setSelectedDate, program } = useTracker();
+  const { logs, program, setActiveLoop, setActiveCycleDay } = useTracker();
   const [currentMonthDate, setCurrentMonthDate] = useState(() => new Date());
 
   const year = currentMonthDate.getFullYear();
@@ -21,9 +21,8 @@ export const CalendarMatrix: React.FC = () => {
   const monthName = currentMonthDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
   // Get total days in month
-  const firstDayIndex = new Date(year, month, 1).getDay(); // 0 is Sunday
+  const firstDayIndex = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
-
   const daysArray = Array.from({ length: daysInMonth }, (_, i) => i + 1);
 
   // Helper to format date string YYYY-MM-DD
@@ -31,6 +30,11 @@ export const CalendarMatrix: React.FC = () => {
     const mStr = String(month + 1).padStart(2, '0');
     const dStr = String(dNum).padStart(2, '0');
     return `${year}-${mStr}-${dStr}`;
+  };
+
+  // Find workout log performed on this date
+  const findLogForDate = (dateKey: string) => {
+    return Object.values(logs).find((l) => l.date === dateKey);
   };
 
   const getDayDotColor = (cycleDayNum: number) => {
@@ -51,7 +55,7 @@ export const CalendarMatrix: React.FC = () => {
           </div>
           <div>
             <h3 className="font-bold text-slate-100 text-base">{monthName}</h3>
-            <p className="text-xs text-slate-400">9-Day Cycle Adherence Calendar</p>
+            <p className="text-xs text-slate-400">Workout Execution Calendar (Logged Sessions)</p>
           </div>
         </div>
 
@@ -99,38 +103,39 @@ export const CalendarMatrix: React.FC = () => {
         {/* Days of month */}
         {daysArray.map((dayNum) => {
           const dateKey = formatDateKey(dayNum);
-          const isSelected = dateKey === selectedDate;
-          const log = logs[dateKey];
+          const log = findLogForDate(dateKey);
           const hasLog = Boolean(log);
           const status = log?.status || 'pending';
           const cycleDayNum = log?.cycleDayNumber;
+          const loopNum = log?.loopNumber;
 
           return (
             <button
               key={dateKey}
               type="button"
-              onClick={() => setSelectedDate(dateKey)}
-              className={`min-h-[70px] sm:min-h-[85px] p-2 rounded-xl border flex flex-col justify-between text-left transition-all relative group ${
-                isSelected
-                  ? 'bg-slate-800 border-emerald-400 ring-2 ring-emerald-400/40 shadow-lg'
-                  : 'bg-slate-950/70 border-slate-800/80 hover:border-slate-700 hover:bg-slate-900/60'
+              onClick={() => {
+                if (log) {
+                  setActiveLoop(log.loopNumber);
+                  setActiveCycleDay(log.cycleDayNumber);
+                }
+              }}
+              className={`min-h-[70px] sm:min-h-[85px] p-2 rounded-xl border flex flex-col justify-between text-left transition-all relative group cursor-pointer ${
+                hasLog
+                  ? 'bg-slate-950/90 border-slate-700/80 hover:border-emerald-500 hover:bg-slate-900'
+                  : 'bg-slate-950/40 border-slate-900 hover:border-slate-800'
               }`}
             >
               {/* Day header: Day Number & Cycle Indicator Dot */}
               <div className="flex items-center justify-between w-full">
-                <span
-                  className={`text-xs font-mono font-bold ${
-                    isSelected ? 'text-emerald-400' : 'text-slate-300'
-                  }`}
-                >
+                <span className="text-xs font-mono font-bold text-slate-300">
                   {dayNum}
                 </span>
 
                 {cycleDayNum && (
-                  <div className="flex items-center gap-1" title={`Cycle Day ${cycleDayNum}`}>
+                  <div className="flex items-center gap-1" title={`Loop ${loopNum} Day ${cycleDayNum}`}>
                     <span className={`w-2 h-2 rounded-full ${getDayDotColor(cycleDayNum)}`} />
-                    <span className="text-[10px] font-mono text-slate-500 hidden sm:inline">
-                      D{cycleDayNum}
+                    <span className="text-[10px] font-mono text-amber-400 font-bold">
+                      L{loopNum}D{cycleDayNum}
                     </span>
                   </div>
                 )}

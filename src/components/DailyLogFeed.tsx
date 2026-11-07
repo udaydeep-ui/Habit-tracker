@@ -7,51 +7,39 @@ import {
   Plus,
   Trash2,
   Trophy,
-  HeartPulse,
-  Wind,
-  CheckCircle2,
-  Edit3,
   Calendar,
-  Save,
+  ChevronLeft,
+  ChevronRight,
+  RotateCw,
+  Sparkles,
 } from 'lucide-react';
 import { useTracker } from '../context/TrackerContext';
-import { StatusQuickPicker, StatusBadge } from './StatusBadge';
+import { StatusQuickPicker } from './StatusBadge';
 import { DayTypeTag } from './DayTypeTag';
 import { IntervalTimer } from './IntervalTimer';
 
 export const DailyLogFeed: React.FC = () => {
   const {
     program,
-    logs,
-    selectedDate,
-    setSelectedDate,
-    setDayStatus,
-    setSubtaskStatus,
-    updateCalories,
-    updateProgressions,
-    updateDayWorks,
+    activeLoop,
+    activeCycleDayNumber,
+    getActiveLog,
+    setCycleDayStatus,
+    setCycleSubtaskStatus,
+    updateActiveLog,
+    updateActiveCalories,
+    updateActiveProgressions,
+    updateActiveDayWorks,
+    advanceToNextDay,
+    goToPreviousDay,
+    advanceToNextLoop,
     addCustomTaskToDay,
     deleteCustomTaskFromDay,
-    currentLoop,
   } = useTracker();
 
-  // Find active log for selectedDate
-  const log = logs[selectedDate] || {
-    id: `log-${selectedDate}`,
-    date: selectedDate,
-    cycleDayNumber: 1,
-    loopNumber: currentLoop,
-    status: 'pending',
-    tasksStatus: {},
-    habitsStatus: {},
-    calories: { consumed: 2500, burned: 500, targetCalories: 2500, proteinGrams: 140, carbsGrams: 260, fatGrams: 65 },
-    progressions: { bodyWeightKg: 74, strengthExercises: [] },
-    dayWorks: { warmupCompleted: false, breathingCheck: false, workoutNotes: '', feeling: 'good' },
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  };
-
-  const currentDay = program.days.find((d) => d.dayNumber === log.cycleDayNumber) || program.days[0];
+  const log = getActiveLog();
+  const currentDay = program.days.find((d) => d.dayNumber === activeCycleDayNumber) || program.days[0];
+  const cycleLength = program.cycleLength || 9;
 
   // Local states for quick adding tasks & strength exercises
   const [newTaskTitle, setNewTaskTitle] = useState('');
@@ -68,15 +56,15 @@ export const DailyLogFeed: React.FC = () => {
   const burned = log.calories?.burned || 0;
   const netCalories = consumed - burned;
 
-  // Progression note for current loop
+  // Progression note calculated dynamically from activeLoop
   const getLoopProgressionTarget = () => {
     if (currentDay.dayNumber === 4) {
-      const bursts = 5 + (log.loopNumber - 1);
-      return `Loop #${log.loopNumber} Target: ${bursts} fast bursts (30–45 sec each) with 2 min walk between.`;
+      const bursts = 5 + (activeLoop - 1);
+      return `Loop #${activeLoop} Target: ${bursts} fast bursts (30–45 sec each) with 2 min walk between.`;
     }
     if (currentDay.dayNumber === 6) {
-      const runTime = Math.min(60, 20 + (log.loopNumber - 1) * 5);
-      return `Loop #${log.loopNumber} Target: ${runTime} min steady running capped strictly at 7 km/h.`;
+      const runTime = Math.min(60, 20 + (activeLoop - 1) * 5);
+      return `Loop #${activeLoop} Target: ${runTime} min steady running capped strictly at 7 km/h.`;
     }
     if (currentDay.dayNumber === 5) {
       return `Run-walk 2 min / 1 min × 6 + 4 strides (15s fast, walk back × 4).`;
@@ -94,7 +82,7 @@ export const DailyLogFeed: React.FC = () => {
       notes: '',
       isPR: false,
     };
-    updateProgressions(selectedDate, {
+    updateActiveProgressions({
       strengthExercises: [...currentExercises, newEx],
     });
     setNewExerciseName('');
@@ -113,12 +101,12 @@ export const DailyLogFeed: React.FC = () => {
       }
       return ex;
     });
-    updateProgressions(selectedDate, { strengthExercises: updated });
+    updateActiveProgressions({ strengthExercises: updated });
   };
 
   const handleRemoveExercise = (exerciseId: string) => {
     const currentExercises = log.progressions?.strengthExercises || [];
-    updateProgressions(selectedDate, {
+    updateActiveProgressions({
       strengthExercises: currentExercises.filter((e) => e.id !== exerciseId),
     });
   };
@@ -126,7 +114,7 @@ export const DailyLogFeed: React.FC = () => {
   const handleTogglePR = (exerciseId: string) => {
     const currentExercises = log.progressions?.strengthExercises || [];
     const updated = currentExercises.map((e) => (e.id === exerciseId ? { ...e, isPR: !e.isPR } : e));
-    updateProgressions(selectedDate, { strengthExercises: updated });
+    updateActiveProgressions({ strengthExercises: updated });
   };
 
   const handleCreateSubtask = (e: React.FormEvent) => {
@@ -159,21 +147,26 @@ export const DailyLogFeed: React.FC = () => {
 
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2.5 mb-2">
+            <div className="flex flex-wrap items-center gap-2 mb-2">
+              <span className="px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/30 text-xs font-mono font-black">
+                LOOP #{activeLoop}
+              </span>
+
               <span className="px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700 text-xs font-mono font-bold text-slate-300">
-                DAY {currentDay.dayNumber} OF {program.cycleLength}
+                DAY {currentDay.dayNumber} OF {cycleLength}
               </span>
+
               <DayTypeTag type={currentDay.type} size="md" />
-              <span className="text-xs font-mono text-slate-400">
-                Loop #{log.loopNumber}
-              </span>
-              <div className="flex items-center gap-1.5 ml-2 text-xs text-slate-400 font-mono">
-                <Calendar size={13} />
+
+              {/* Date stamp field for when this session is performed */}
+              <div className="flex items-center gap-1.5 ml-1 text-xs text-slate-400 font-mono bg-slate-950 px-2 py-1 rounded-lg border border-slate-800">
+                <Calendar size={13} className="text-slate-400" />
+                <span className="text-[11px] text-slate-500">Performed on:</span>
                 <input
                   type="date"
-                  value={selectedDate}
-                  onChange={(e) => setSelectedDate(e.target.value)}
-                  className="bg-slate-800/80 border border-slate-700 rounded px-2 py-0.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+                  value={log.date || ''}
+                  onChange={(e) => updateActiveLog({ date: e.target.value })}
+                  className="bg-transparent text-xs text-slate-200 focus:outline-none"
                 />
               </div>
             </div>
@@ -193,16 +186,49 @@ export const DailyLogFeed: React.FC = () => {
             </div>
           </div>
 
-          {/* Quick Status Control */}
-          <div className="flex flex-col items-start lg:items-end gap-2 bg-slate-950/70 p-3.5 rounded-xl border border-slate-800/90">
+          {/* Quick Status Control and Navigation */}
+          <div className="flex flex-col items-start lg:items-end gap-2.5 bg-slate-950/70 p-3.5 rounded-xl border border-slate-800/90">
             <span className="text-xs font-mono font-bold uppercase tracking-wider text-slate-400">
-              Overall Day Status
+              Session Status
             </span>
             <StatusQuickPicker
               currentStatus={log.status}
-              onChange={(newStatus) => setDayStatus(selectedDate, newStatus)}
+              onChange={(newStatus) => setCycleDayStatus(activeLoop, activeCycleDayNumber, newStatus)}
               size="md"
             />
+
+            {/* Quick Session Stepper */}
+            <div className="flex items-center gap-1.5 w-full pt-1.5 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={goToPreviousDay}
+                className="flex-1 px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white text-xs font-bold font-mono flex items-center justify-center gap-1 border border-slate-800"
+              >
+                <ChevronLeft size={14} />
+                <span>Prev Day</span>
+              </button>
+
+              {activeCycleDayNumber < cycleLength ? (
+                <button
+                  type="button"
+                  onClick={advanceToNextDay}
+                  className="flex-1 px-2.5 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 text-xs font-bold font-mono flex items-center justify-center gap-1 border border-emerald-500/30"
+                >
+                  <span>Next Day</span>
+                  <ChevronRight size={14} />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={advanceToNextLoop}
+                  className="flex-1 px-2.5 py-1.5 rounded-lg bg-amber-500 text-slate-950 text-xs font-black font-mono flex items-center justify-center gap-1 shadow-lg shadow-amber-500/20"
+                  title="Loop 9-Day circle completed! Start next loop."
+                >
+                  <RotateCw size={12} />
+                  <span>Loop #{activeLoop + 1}</span>
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -211,9 +237,9 @@ export const DailyLogFeed: React.FC = () => {
       {currentDay.type !== 'rest' && (
         <IntervalTimer
           dayNumber={currentDay.dayNumber}
-          loopNumber={log.loopNumber}
+          loopNumber={activeLoop}
           onFinish={() => {
-            setDayStatus(selectedDate, 'completed');
+            setCycleDayStatus(activeLoop, activeCycleDayNumber, 'completed');
           }}
         />
       )}
@@ -228,8 +254,8 @@ export const DailyLogFeed: React.FC = () => {
                 <Flame size={20} />
               </div>
               <div>
-                <h3 className="font-bold text-slate-100 text-base">Calorie & Macro Feed</h3>
-                <p className="text-xs text-slate-400">Track energy balance and fueling</p>
+                <h3 className="font-bold text-slate-100 text-base">Calorie &amp; Macro Feed</h3>
+                <p className="text-xs text-slate-400">Energy balance for Loop #{activeLoop} Day {activeCycleDayNumber}</p>
               </div>
             </div>
 
@@ -258,7 +284,7 @@ export const DailyLogFeed: React.FC = () => {
                 max={10000}
                 step={50}
                 value={log.calories?.consumed ?? ''}
-                onChange={(e) => updateCalories(selectedDate, { consumed: Number(e.target.value) || 0 })}
+                onChange={(e) => updateActiveCalories({ consumed: Number(e.target.value) || 0 })}
                 className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-lg font-mono font-bold text-slate-100 focus:outline-none focus:border-amber-400"
                 placeholder="2500"
               />
@@ -275,7 +301,7 @@ export const DailyLogFeed: React.FC = () => {
                 max={10000}
                 step={50}
                 value={log.calories?.burned ?? ''}
-                onChange={(e) => updateCalories(selectedDate, { burned: Number(e.target.value) || 0 })}
+                onChange={(e) => updateActiveCalories({ burned: Number(e.target.value) || 0 })}
                 className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-lg font-mono font-bold text-slate-100 focus:outline-none focus:border-orange-400"
                 placeholder="550"
               />
@@ -294,7 +320,7 @@ export const DailyLogFeed: React.FC = () => {
                   type="number"
                   min={0}
                   value={log.calories?.proteinGrams ?? ''}
-                  onChange={(e) => updateCalories(selectedDate, { proteinGrams: Number(e.target.value) || 0 })}
+                  onChange={(e) => updateActiveCalories({ proteinGrams: Number(e.target.value) || 0 })}
                   className="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1.5 text-sm font-mono text-slate-200"
                   placeholder="140"
                 />
@@ -305,7 +331,7 @@ export const DailyLogFeed: React.FC = () => {
                   type="number"
                   min={0}
                   value={log.calories?.carbsGrams ?? ''}
-                  onChange={(e) => updateCalories(selectedDate, { carbsGrams: Number(e.target.value) || 0 })}
+                  onChange={(e) => updateActiveCalories({ carbsGrams: Number(e.target.value) || 0 })}
                   className="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1.5 text-sm font-mono text-slate-200"
                   placeholder="280"
                 />
@@ -316,7 +342,7 @@ export const DailyLogFeed: React.FC = () => {
                   type="number"
                   min={0}
                   value={log.calories?.fatGrams ?? ''}
-                  onChange={(e) => updateCalories(selectedDate, { fatGrams: Number(e.target.value) || 0 })}
+                  onChange={(e) => updateActiveCalories({ fatGrams: Number(e.target.value) || 0 })}
                   className="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1.5 text-sm font-mono text-slate-200"
                   placeholder="65"
                 />
@@ -327,7 +353,7 @@ export const DailyLogFeed: React.FC = () => {
           {/* Day Works & Recovery Notes */}
           <div className="space-y-3">
             <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">
-              Execution & Recovery Works
+              Execution &amp; Recovery Works
             </span>
 
             {/* Checklists */}
@@ -336,17 +362,17 @@ export const DailyLogFeed: React.FC = () => {
                 <input
                   type="checkbox"
                   checked={log.dayWorks?.warmupCompleted || false}
-                  onChange={(e) => updateDayWorks(selectedDate, { warmupCompleted: e.target.checked })}
+                  onChange={(e) => updateActiveDayWorks({ warmupCompleted: e.target.checked })}
                   className="w-4 h-4 rounded text-emerald-500 bg-slate-900 border-slate-700 focus:ring-0"
                 />
-                <span className="text-xs text-slate-300 font-medium">Warm-up & Drills Done</span>
+                <span className="text-xs text-slate-300 font-medium">Warm-up &amp; Drills Done</span>
               </label>
 
               <label className="flex items-center gap-2.5 p-2.5 rounded-xl bg-slate-950/60 border border-slate-800/80 cursor-pointer hover:border-slate-700">
                 <input
                   type="checkbox"
                   checked={log.dayWorks?.breathingCheck || false}
-                  onChange={(e) => updateDayWorks(selectedDate, { breathingCheck: e.target.checked })}
+                  onChange={(e) => updateActiveDayWorks({ breathingCheck: e.target.checked })}
                   className="w-4 h-4 rounded text-emerald-500 bg-slate-900 border-slate-700 focus:ring-0"
                 />
                 <span className="text-xs text-slate-300 font-medium">Belly Breaths (In 3, Out 2)</span>
@@ -361,7 +387,7 @@ export const DailyLogFeed: React.FC = () => {
                   <button
                     key={feel}
                     type="button"
-                    onClick={() => updateDayWorks(selectedDate, { feeling: feel })}
+                    onClick={() => updateActiveDayWorks({ feeling: feel })}
                     className={`py-1.5 px-1 rounded-lg text-xs font-semibold capitalize transition-all border ${
                       log.dayWorks?.feeling === feel
                         ? 'bg-slate-700 text-white border-slate-500 shadow-sm'
@@ -376,11 +402,11 @@ export const DailyLogFeed: React.FC = () => {
 
             {/* Workout Notes */}
             <div>
-              <label className="text-xs text-slate-400 block mb-1 font-medium">Daily Works & Session Notes:</label>
+              <label className="text-xs text-slate-400 block mb-1 font-medium">Daily Works &amp; Session Notes:</label>
               <textarea
                 rows={2}
                 value={log.dayWorks?.workoutNotes || ''}
-                onChange={(e) => updateDayWorks(selectedDate, { workoutNotes: e.target.value })}
+                onChange={(e) => updateActiveDayWorks({ workoutNotes: e.target.value })}
                 placeholder="Log how your cadence felt, pacing observations, or gym lifts..."
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-200 focus:outline-none focus:border-slate-600 resize-none"
               />
@@ -397,7 +423,7 @@ export const DailyLogFeed: React.FC = () => {
               </div>
               <div>
                 <h3 className="font-bold text-slate-100 text-base">Progressions Tracker</h3>
-                <p className="text-xs text-slate-400">Cardio pacing & gym strength overload</p>
+                <p className="text-xs text-slate-400">Cardio pacing &amp; gym strength overload</p>
               </div>
             </div>
 
@@ -409,7 +435,7 @@ export const DailyLogFeed: React.FC = () => {
                 step={0.1}
                 value={log.progressions?.bodyWeightKg ?? ''}
                 onChange={(e) =>
-                  updateProgressions(selectedDate, { bodyWeightKg: Number(e.target.value) || undefined })
+                  updateActiveProgressions({ bodyWeightKg: Number(e.target.value) || undefined })
                 }
                 className="w-14 bg-transparent text-xs font-mono font-bold text-slate-200 focus:outline-none"
                 placeholder="74.0"
@@ -431,7 +457,7 @@ export const DailyLogFeed: React.FC = () => {
                   step={0.1}
                   value={log.progressions?.runningDistanceKm ?? ''}
                   onChange={(e) =>
-                    updateProgressions(selectedDate, { runningDistanceKm: Number(e.target.value) || undefined })
+                    updateActiveProgressions({ runningDistanceKm: Number(e.target.value) || undefined })
                   }
                   className="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1.5 text-xs font-mono text-slate-200"
                   placeholder="3.5"
@@ -444,7 +470,7 @@ export const DailyLogFeed: React.FC = () => {
                   type="number"
                   value={log.progressions?.runningDurationMin ?? ''}
                   onChange={(e) =>
-                    updateProgressions(selectedDate, { runningDurationMin: Number(e.target.value) || undefined })
+                    updateActiveProgressions({ runningDurationMin: Number(e.target.value) || undefined })
                   }
                   className="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1.5 text-xs font-mono text-slate-200"
                   placeholder="25"
@@ -458,7 +484,7 @@ export const DailyLogFeed: React.FC = () => {
                   step={0.1}
                   value={log.progressions?.runningSpeedKmh ?? ''}
                   onChange={(e) =>
-                    updateProgressions(selectedDate, { runningSpeedKmh: Number(e.target.value) || undefined })
+                    updateActiveProgressions({ runningSpeedKmh: Number(e.target.value) || undefined })
                   }
                   className="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1.5 text-xs font-mono text-slate-200"
                   placeholder="6.8"
@@ -473,7 +499,7 @@ export const DailyLogFeed: React.FC = () => {
                   max={10}
                   value={log.progressions?.rpeScore ?? ''}
                   onChange={(e) =>
-                    updateProgressions(selectedDate, { rpeScore: Number(e.target.value) || undefined })
+                    updateActiveProgressions({ rpeScore: Number(e.target.value) || undefined })
                   }
                   className="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1.5 text-xs font-mono text-slate-200"
                   placeholder="7"
@@ -566,14 +592,14 @@ export const DailyLogFeed: React.FC = () => {
               </div>
             ) : (
               <div className="p-4 rounded-xl border border-dashed border-slate-800 text-center text-xs text-slate-500">
-                No strength sets logged yet today. Click &quot;Add Exercise&quot; to log your bench, squats, or rows.
+                No strength sets logged yet for this session. Click &quot;Add Exercise&quot; to log your bench, squats, or rows.
               </div>
             )}
 
             {/* Modal/Inline Add Exercise form */}
             {showAddExercise && (
               <div className="mt-3 p-3 bg-slate-950 border border-slate-700 rounded-xl space-y-2">
-                <span className="text-xs font-bold text-slate-300 block">Add Exercise to Today</span>
+                <span className="text-xs font-bold text-slate-300 block">Add Exercise to Session</span>
                 <input
                   type="text"
                   value={newExerciseName}
@@ -626,7 +652,7 @@ export const DailyLogFeed: React.FC = () => {
         <div className="flex items-center justify-between mb-4">
           <div>
             <h3 className="font-bold text-slate-100 text-base">
-              Tasks & Sub-Routines for Day {currentDay.dayNumber}
+              Tasks &amp; Sub-Routines for Day {currentDay.dayNumber}
             </h3>
             <p className="text-xs text-slate-400">
               Check off tasks with Tick (✓), Cross (✗), or Yellow Minus (−)
@@ -653,35 +679,19 @@ export const DailyLogFeed: React.FC = () => {
                 key={task.id}
                 className="flex items-center justify-between p-3 rounded-xl bg-slate-950/70 border border-slate-800/80 hover:border-slate-700 transition-all"
               >
-                <div className="flex items-center gap-3">
-                  <StatusBadge
-                    status={taskStatus}
-                    size="md"
-                    onClick={() => {
-                      const next = taskStatus === 'pending'
-                        ? 'completed'
-                        : taskStatus === 'completed'
-                        ? 'failed'
-                        : taskStatus === 'failed'
-                        ? 'postponed_cancelled'
-                        : 'pending';
-                      setSubtaskStatus(selectedDate, task.id, next);
-                    }}
-                  />
-                  <div>
-                    <span className="text-sm font-semibold text-slate-200">{task.title}</span>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <span className="text-[10px] font-mono uppercase tracking-wider text-slate-500">
-                        {task.category}
-                      </span>
-                    </div>
+                <div>
+                  <span className="text-sm font-semibold text-slate-200">{task.title}</span>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className="text-[10px] font-mono uppercase tracking-wider text-slate-500">
+                      {task.category}
+                    </span>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-2">
                   <StatusQuickPicker
                     currentStatus={taskStatus}
-                    onChange={(st) => setSubtaskStatus(selectedDate, task.id, st)}
+                    onChange={(st) => setCycleSubtaskStatus(activeLoop, activeCycleDayNumber, task.id, st)}
                     size="sm"
                   />
                   <button
