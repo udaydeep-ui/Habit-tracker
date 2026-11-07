@@ -1,0 +1,6 @@
+{
+  "name": "CycleSync: 9-Day Routine & Habit Tracker",
+  "description": "Sleek data-driven habit tracker, reminder system, and progression dashboard built for 9-day gym and running programs with AI plan parsing, calorie tracking, and progress export.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
